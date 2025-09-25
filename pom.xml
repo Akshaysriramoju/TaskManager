@@ -8,18 +8,18 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.1.5</version> <!-- Recommended stable Spring Boot version -->
-        <relativePath/> <!-- lookup parent from repository -->
+        <version>3.1.5</version> <!-- Stable version -->
+        <relativePath/>
     </parent>
 
     <groupId>com.example</groupId>
     <artifactId>taskmanager</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>TaskManager</name>
-    <description>Demo project for Spring Boot</description>
 
     <properties>
         <java.version>17</java.version>
+        <maven.compiler.release>17</maven.compiler.release> <!-- Important for JDK version -->
     </properties>
 
     <dependencies>
@@ -43,13 +43,6 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- H2 Database for Testing (Optional) -->
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>test</scope>
-        </dependency>
-
         <!-- Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -60,9 +53,28 @@
 
     <build>
         <plugins>
+            <!-- Maven Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>17</release> <!-- Ensures JDK 17 compatibility -->
+                </configuration>
+            </plugin>
+
+            <!-- Spring Boot Maven Plugin to build executable jar -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.1.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
