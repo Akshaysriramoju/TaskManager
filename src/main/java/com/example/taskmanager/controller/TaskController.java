@@ -2,7 +2,6 @@ package com.example.taskmanager.controller;
 
 import com.example.taskmanager.model.Task;
 import com.example.taskmanager.repository.TaskRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,8 +11,11 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class TaskController {
 
-    @Autowired
-    private TaskRepository repository;
+    private final TaskRepository repository;
+
+    public TaskController(TaskRepository repository) {
+        this.repository = repository;
+    }
 
     @GetMapping
     public List<Task> getAllTasks() {
@@ -27,8 +29,7 @@ public class TaskController {
 
     @PutMapping("/{id}")
     public Task updateTask(@PathVariable Long id, @RequestBody Task updatedTask) {
-        Task task = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Task not found with id " + id));
+        Task task = repository.findById(id).orElseThrow();
         task.setTitle(updatedTask.getTitle());
         task.setCompleted(updatedTask.isCompleted());
         return repository.save(task);
