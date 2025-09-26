@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         SONAR_HOST_URL  = 'http://13.235.255.5:9000'
-        SONAR_TOKEN     = credentials('sonar-token1') // use Jenkins secret credential ID
+        SONAR_TOKEN     = credentials('sonar-token1') // Jenkins secret ID
         NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED      = credentials('nexus-credentials')
         IMAGE_NAME      = 'taskmanager'
@@ -31,7 +31,8 @@ pipeline {
                         -Dsonar.projectKey=taskmanager \
                         -Dsonar.projectName=taskmanager \
                         -Dsonar.host.url=${SONAR_HOST_URL} \
-                        -Dsonar.login=${SONAR_TOKEN}
+                        -Dsonar.login=${SONAR_TOKEN} \
+                        -DskipTests=false
                     """
                 }
             }
@@ -40,10 +41,14 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    timeout(time: 10, unit: 'MINUTES') {
-                        def qg = waitForQualityGate()
-                        if (qg.status != 'OK') {
-                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                    timeout(time: 15, unit: 'MINUTES') { // increased timeout
+                        retry(2) { // retry once if webhook delay occurs
+                            def qg = waitForQualityGate()
+                            if (qg.status != 'OK') {
+                                error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                            } else {
+                                echo "Quality Gate passed: ${qg.status}"
+                            }
                         }
                     }
                 }
