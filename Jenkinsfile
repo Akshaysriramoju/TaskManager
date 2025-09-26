@@ -58,11 +58,12 @@ pipeline {
         stage('Set Version') {
             steps {
                 script {
+                    // Use Maven version + Jenkins build number for unique versioning
                     env.VERSION = sh(
                         script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
                         returnStdout: true
-                    ).trim()
-                    echo "Project Version: ${env.VERSION}"
+                    ).trim() + "-${env.BUILD_NUMBER}"
+                    echo "Unique Project Version: ${env.VERSION}"
                 }
             }
         }
@@ -71,6 +72,17 @@ pipeline {
             steps {
                 echo "Building Spring Boot JAR..."
                 sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Upload Artifact to Nexus') {
+            steps {
+                script {
+                    sh """
+                        curl -v -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} --upload-file target/taskmanager-${env.VERSION}.jar \
+                        ${NEXUS_URL}taskmanager-${env.VERSION}.jar
+                    """
+                }
             }
         }
 
@@ -103,20 +115,27 @@ pipeline {
             }
         }
 
-        stage('Deploy on EC2') {
+        stage('Deploy on EC2 with NGINX') {
             steps {
                 script {
+                    // Stop and remove previous container
                     sh """
                         docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                         docker stop ${IMAGE_NAME} || true
                         docker rm ${IMAGE_NAME} || true
                         docker run -d --name ${IMAGE_NAME} -p 8080:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                     """
+
+                    // Optionally copy JAR from Nexus to NGINX static folder
+                    sh """
+                        curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
+                        # For example, copy to /usr/share/nginx/html if needed
+                        # cp taskmanager-${env.VERSION}.jar /usr/share/nginx/html/
+                    """
                 }
-                echo "Deployment Completed on EC2."
+                echo "Deployment Completed on EC2/NGINX."
             }
         }
-
     }
 
     post {
