@@ -10,13 +10,11 @@ pipeline {
         SONAR_TOKEN     = credentials('sonar-token1')
         NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED      = credentials('nexus-credentials')
-        DOCKER_REGISTRY = 'docker.io/akshaysriramoju'
-        IMAGE_NAME      = 'taskmanager'
         APP_PORT        = '8080'
         EC2_USER        = 'ubuntu'
         EC2_HOST        = '13.235.255.5'
         REMOTE_APP_DIR  = '/var/www/taskmanager'
-        DOMAIN_NAME     = 'your-domain.com' // replace with domain or EC2 IP
+        DOMAIN_NAME     = '13.235.255.5' // use domain if configured
     }
 
     stages {
@@ -47,7 +45,7 @@ pipeline {
             steps {
                 script {
                     timeout(time: 15, unit: 'MINUTES') {
-                        retry(2) {
+                        retry(2) { 
                             def qg = waitForQualityGate()
                             if (qg.status != 'OK') {
                                 error "Pipeline aborted due to quality gate failure: ${qg.status}"
@@ -88,67 +86,58 @@ pipeline {
             steps {
                 script {
                     sh """
-                        curl -v -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} \
-                        --upload-file target/taskmanager-${env.VERSION}.jar \
+                        curl -v -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} --upload-file target/taskmanager-${env.VERSION}.jar \
                         ${NEXUS_URL}taskmanager-${env.VERSION}.jar
                     """
                 }
             }
         }
 
-        stage('Build & Push Docker Image') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKERHUB_USR',
-                        passwordVariable: 'DOCKERHUB_PSW'
-                    )]) {
-                        sh """
-                            echo "${DOCKERHUB_PSW}" | docker login -u "${DOCKERHUB_USR}" --password-stdin
-                            docker build --build-arg JAR_FILE=target/taskmanager-${env.VERSION}.jar -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION} .
-                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
-                            docker logout
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Deploy on EC2 with Docker & Nginx') {
+        stage('Deploy Latest JAR on EC2') {
             steps {
                 sshagent(['ec2-deploy-key']) {
                     sh """
                         ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                            docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
-                            docker stop ${IMAGE_NAME} || true
-                            docker rm ${IMAGE_NAME} || true
-                            docker run -d --name ${IMAGE_NAME} -p ${APP_PORT}:8080 --restart unless-stopped ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                            mkdir -p ${REMOTE_APP_DIR}
+                            cd ${REMOTE_APP_DIR}
+
+                            # Download latest JAR from Nexus
+                            curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
+
+                            # Stop existing app if running
+                            PID=\$(pgrep -f "java -jar")
+                            if [ ! -z "\$PID" ]; then
+                                kill -9 \$PID
+                                echo "Stopped existing app (PID: \$PID)"
+                            fi
+
+                            # Start new version
+                            nohup java -jar ${REMOTE_APP_DIR}/taskmanager-${env.VERSION}.jar --server.port=${APP_PORT} > ${REMOTE_APP_DIR}/app.log 2>&1 &
 
                             # Configure Nginx reverse proxy
                             sudo rm -f /etc/nginx/sites-enabled/default
-                            if [ ! -f /etc/nginx/sites-available/taskmanager ]; then
-                                echo "server {
-                                    listen 80;
-                                    server_name ${DOMAIN_NAME};
+                            echo "server {
+                                listen 80;
+                                server_name ${DOMAIN_NAME};
 
-                                    location / {
-                                        proxy_pass http://localhost:${APP_PORT};
-                                        proxy_set_header Host \$host;
-                                        proxy_set_header X-Real-IP \$remote_addr;
-                                        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                                        proxy_set_header X-Forwarded-Proto \$scheme;
-                                    }
-                                }" | sudo tee /etc/nginx/sites-available/taskmanager
-                                sudo ln -s /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
-                            fi
+                                location / {
+                                    proxy_pass http://localhost:${APP_PORT};
+                                    proxy_set_header Host \$host;
+                                    proxy_set_header X-Real-IP \$remote_addr;
+                                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                                    proxy_set_header X-Forwarded-Proto \$scheme;
+                                }
+                            }" | sudo tee /etc/nginx/sites-available/taskmanager
 
+                            sudo ln -sf /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
                             sudo nginx -t && sudo systemctl reload nginx
                         '
                     """
+                    echo "✅ Deployment Completed. Access app at: http://${DOMAIN_NAME}/"
                 }
             }
         }
+
     }
 
     post {
@@ -157,10 +146,10 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Pipeline completed successfully!"
+            echo "✅ Pipeline completed successfully!"
         }
         failure {
-            echo "Pipeline failed!"
+            echo "❌ Pipeline failed!"
         }
     }
 }
