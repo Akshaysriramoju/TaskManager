@@ -25,17 +25,18 @@ pipeline {
 
         stage('Code Quality - SonarQube') {
             steps {
-                withSonarQubeEnv('SonarQubeServer') {
-                    sh """
-                        mvn clean verify sonar:sonar \
-                            -Dsonar.projectKey=taskmanager \
-                            -Dsonar.projectName='taskmanager' \
-                            -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.login=${SONAR_TOKEN}
-                    """
-                }
-            }
+                withSonarQubeEnv('SonarQubeServer') { // your SonarQube installation name
+                sh """
+                mvn clean verify sonar:sonar \
+                -Dsonar.projectKey=taskmanager \
+                -Dsonar.projectName=taskmanager \
+                -Dsonar.host.url=http://13.235.255.5:9000 \
+                -Dsonar.token=squ_84ff2db241b9d31828adf68516f6fa38a4c61769
+            """
         }
+    }
+}
+
 
         stage('Quality Gate') {
             steps {
