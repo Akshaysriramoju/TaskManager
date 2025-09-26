@@ -10,9 +10,11 @@ pipeline {
         SONAR_TOKEN     = credentials('sonar-token1')
         NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED      = credentials('nexus-credentials')
-        IMAGE_NAME      = 'taskmanager'
-        DOCKER_REGISTRY = 'docker.io/akshaysriramoju'
         APP_PORT        = '8080'
+        EC2_USER        = 'ubuntu'  // or 'ec2-user' depending on your AMI
+        EC2_HOST        = '<EC2_PUBLIC_IP>'
+        REMOTE_APP_DIR  = '/var/www/taskmanager'
+        DOMAIN_NAME     = 'your-domain.com' // if using domain
     }
 
     stages {
@@ -91,51 +93,49 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Deploy Latest JAR on EC2 via SSH & Nginx') {
             steps {
-                script {
+                sshagent(['ec2-deploy-key']) {
                     sh """
-                        docker build --build-arg JAR_FILE=target/taskmanager-${env.VERSION}.jar \
-                                     -t ${IMAGE_NAME}:${env.VERSION} .
-                        docker tag ${IMAGE_NAME}:${env.VERSION} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
+                            mkdir -p ${REMOTE_APP_DIR}
+                            cd ${REMOTE_APP_DIR}
+
+                            # Download latest JAR from Nexus
+                            curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
+
+                            # Stop existing app if running
+                            pkill -f "java -jar" || true
+
+                            # Start new version
+                            nohup java -jar ${REMOTE_APP_DIR}/taskmanager-${env.VERSION}.jar --server.port=${APP_PORT} > ${REMOTE_APP_DIR}/app.log 2>&1 &
+
+                            # Update Nginx reverse proxy
+                            if [ ! -f /etc/nginx/sites-available/taskmanager ]; then
+                                echo "server {
+                                    listen 80;
+                                    server_name ${DOMAIN_NAME};
+
+                                    location / {
+                                        proxy_pass http://localhost:${APP_PORT};
+                                        proxy_set_header Host \$host;
+                                        proxy_set_header X-Real-IP \$remote_addr;
+                                        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                                        proxy_set_header X-Forwarded-Proto \$scheme;
+                                    }
+                                }" > /etc/nginx/sites-available/taskmanager
+                                ln -s /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
+                            fi
+
+                            # Reload Nginx
+                            sudo nginx -t && sudo systemctl reload nginx
+                        '
                     """
+                    echo "Deployment Completed. Access your app at http://${EC2_HOST}/"
                 }
             }
         }
 
-        stage('Push Docker Image') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKERHUB_USR',
-                        passwordVariable: 'DOCKERHUB_PSW'
-                    )]) {
-                        sh """
-                            echo "${DOCKERHUB_PSW}" | docker login -u "${DOCKERHUB_USR}" --password-stdin
-                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
-                            docker logout
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Deploy on EC2 with Docker') {
-            steps {
-                script {
-                    sh """
-                        docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
-                        docker stop ${IMAGE_NAME} || true
-                        docker rm ${IMAGE_NAME} || true
-                        docker run -d --name ${IMAGE_NAME} -p ${APP_PORT}:8080 --restart unless-stopped \
-                        ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
-                        docker ps -a | grep ${IMAGE_NAME}
-                    """
-                    echo "Deployment Completed on EC2. Access at http://<EC2-PUBLIC-IP>:${APP_PORT}"
-                }
-            }
-        }
     }
 
     post {
