@@ -58,12 +58,19 @@ pipeline {
         stage('Set Version') {
             steps {
                 script {
-                    // Use Maven version + Jenkins build number for unique versioning
-                    env.VERSION = sh(
+                    // Get current version from pom.xml
+                    def baseVersion = sh(
                         script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
                         returnStdout: true
-                    ).trim() + "-${env.BUILD_NUMBER}"
+                    ).trim()
+
+                    // Append Jenkins build number for uniqueness
+                    env.VERSION = "${baseVersion}-${env.BUILD_NUMBER}"
                     echo "Unique Project Version: ${env.VERSION}"
+
+                    // Update pom.xml version
+                    sh "mvn versions:set -DnewVersion=${env.VERSION}"
+                    sh "mvn versions:commit"
                 }
             }
         }
@@ -129,8 +136,7 @@ pipeline {
                     // Optionally copy JAR from Nexus to NGINX static folder
                     sh """
                         curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
-                        # For example, copy to /usr/share/nginx/html if needed
-                        # cp taskmanager-${env.VERSION}.jar /usr/share/nginx/html/
+                        # cp taskmanager-${env.VERSION}.jar /usr/share/nginx/html/  # if needed
                     """
                 }
                 echo "Deployment Completed on EC2/NGINX."
