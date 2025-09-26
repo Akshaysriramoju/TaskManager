@@ -12,7 +12,7 @@ pipeline {
         NEXUS_CRED      = credentials('nexus-credentials')
         APP_PORT        = '8080'
         EC2_USER        = 'ubuntu'  // or 'ec2-user' depending on your AMI
-        EC2_HOST        = '<EC2_PUBLIC_IP>'
+        EC2_HOST        = 'http://13.235.255.5/'
         REMOTE_APP_DIR  = '/var/www/taskmanager'
         DOMAIN_NAME     = 'your-domain.com' // if using domain
     }
@@ -105,12 +105,18 @@ pipeline {
                             curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
 
                             # Stop existing app if running
-                            pkill -f "java -jar" || true
+                            PID=\$(pgrep -f "java -jar")
+                            if [ ! -z "\$PID" ]; then
+                                kill -9 \$PID
+                                echo "Stopped existing app (PID: \$PID)"
+                            fi
 
                             # Start new version
                             nohup java -jar ${REMOTE_APP_DIR}/taskmanager-${env.VERSION}.jar --server.port=${APP_PORT} > ${REMOTE_APP_DIR}/app.log 2>&1 &
 
-                            # Update Nginx reverse proxy
+                            # Remove default Nginx page and configure reverse proxy
+                            sudo rm -f /etc/nginx/sites-enabled/default
+
                             if [ ! -f /etc/nginx/sites-available/taskmanager ]; then
                                 echo "server {
                                     listen 80;
@@ -123,11 +129,11 @@ pipeline {
                                         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                                         proxy_set_header X-Forwarded-Proto \$scheme;
                                     }
-                                }" > /etc/nginx/sites-available/taskmanager
-                                ln -s /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
+                                }" | sudo tee /etc/nginx/sites-available/taskmanager
+                                sudo ln -s /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
                             fi
 
-                            # Reload Nginx
+                            # Test and reload Nginx
                             sudo nginx -t && sudo systemctl reload nginx
                         '
                     """
