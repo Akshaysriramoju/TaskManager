@@ -2,16 +2,16 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() 
+        githubPush()
     }
 
     environment {
-        SONAR_HOST_URL = 'http://13.235.255.5:9000'
-        SONAR_TOKEN    = credentials('sonar-token')
-        NEXUS_URL      = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
-        NEXUS_CRED     = credentials('nexus-credentials')
-        IMAGE_NAME     = 'taskmanager'
-        DOCKER_REGISTRY = 'docker.io/akshaysriramoju'
+        SONAR_HOST_URL   = 'http://13.235.255.5:9000'
+        SONAR_TOKEN      = credentials('sonar-token')
+        NEXUS_URL        = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
+        NEXUS_CRED       = credentials('nexus-credentials')
+        IMAGE_NAME       = 'taskmanager'
+        DOCKER_REGISTRY  = 'docker.io/akshaysriramoju'
     }
 
     stages {
@@ -29,8 +29,8 @@ pipeline {
                 withSonarQubeEnv('SonarQubeServer') {
                     sh """
                         mvn clean verify sonar:sonar \
-                        -Dsonar.host.url=${SONAR_HOST_URL} \
-                        -Dsonar.login=${SONAR_TOKEN}
+                          -Dsonar.host.url=${SONAR_HOST_URL} \
+                          -Dsonar.login=${SONAR_TOKEN}
                     """
                 }
             }
@@ -38,10 +38,12 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'HOURS') {
-                    def qg = waitForQualityGate()
-                    if (qg.status != 'OK') {
-                        error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                script {
+                    timeout(time: 1, unit: 'HOURS') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                        }
                     }
                 }
             }
