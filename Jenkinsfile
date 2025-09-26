@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         SONAR_HOST_URL   = 'http://13.235.255.5:9000'
-        SONAR_TOKEN      = credentials('sonar-token')
+        SONAR_TOKEN      = credentials('sonar-token')  // Ensure this matches the Jenkins credential ID
         NEXUS_URL        = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED       = credentials('nexus-credentials')
         IMAGE_NAME       = 'taskmanager'
@@ -25,14 +25,13 @@ pipeline {
 
         stage('Code Quality - SonarQube') {
             steps {
-                echo "Running SonarQube analysis..."
                 withSonarQubeEnv('SonarQubeServer') {
                     sh """
                         mvn clean verify sonar:sonar \
-                          -Dsonar.projectKey=com.example:taskmanager \
-                          -Dsonar.host.url=${SONAR_HOST_URL} \
-                          -Dsonar.login=${SONAR_TOKEN} \
-                          -Dsonar.language=java
+                            -Dsonar.projectKey=taskmanager \
+                            -Dsonar.projectName='taskmanager' \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.token=${SONAR_TOKEN}
                     """
                 }
             }
