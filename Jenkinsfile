@@ -7,11 +7,12 @@ pipeline {
 
     environment {
         SONAR_HOST_URL  = 'http://13.235.255.5:9000'
-        SONAR_TOKEN     = credentials('sonar-token1') // Jenkins secret ID
+        SONAR_TOKEN     = credentials('sonar-token1')
         NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED      = credentials('nexus-credentials')
         IMAGE_NAME      = 'taskmanager'
         DOCKER_REGISTRY = 'docker.io/akshaysriramoju'
+        APP_PORT        = '8080'
     }
 
     stages {
@@ -58,17 +59,14 @@ pipeline {
         stage('Set Version') {
             steps {
                 script {
-                    // Get current version from pom.xml
                     def baseVersion = sh(
                         script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
                         returnStdout: true
                     ).trim()
 
-                    // Append Jenkins build number for uniqueness
                     env.VERSION = "${baseVersion}-${env.BUILD_NUMBER}"
                     echo "Unique Project Version: ${env.VERSION}"
 
-                    // Update pom.xml version
                     sh "mvn versions:set -DnewVersion=${env.VERSION}"
                     sh "mvn versions:commit"
                 }
@@ -123,23 +121,19 @@ pipeline {
             }
         }
 
-        stage('Deploy on EC2 with NGINX') {
+        stage('Deploy on EC2 with Docker') {
             steps {
                 script {
                     sh """
                         docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                         docker stop ${IMAGE_NAME} || true
                         docker rm ${IMAGE_NAME} || true
-                        docker run -d --name ${IMAGE_NAME} -p 8080:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                        docker run -d --name ${IMAGE_NAME} -p ${APP_PORT}:8080 --restart unless-stopped \
+                        ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                        docker ps -a | grep ${IMAGE_NAME}
                     """
-
-                    // Optional: Copy JAR from Nexus to NGINX folder if needed
-                    sh """
-                        curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
-                        # cp taskmanager-${env.VERSION}.jar /usr/share/nginx/html/
-                    """
+                    echo "Deployment Completed on EC2. Access at http://<EC2-PUBLIC-IP>:${APP_PORT}"
                 }
-                echo "Deployment Completed on EC2/NGINX."
             }
         }
     }
