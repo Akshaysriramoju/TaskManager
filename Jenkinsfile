@@ -41,8 +41,8 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    timeout(time: 15, unit: 'MINUTES') { // increased timeout
-                        retry(2) { // retry once if webhook delay occurs
+                    timeout(time: 15, unit: 'MINUTES') {
+                        retry(2) { 
                             def qg = waitForQualityGate()
                             if (qg.status != 'OK') {
                                 error "Pipeline aborted due to quality gate failure: ${qg.status}"
@@ -123,6 +123,12 @@ pipeline {
         always {
             echo "Cleaning workspace..."
             cleanWs()
+        }
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed!"
         }
     }
 }
