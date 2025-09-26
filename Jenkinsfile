@@ -6,12 +6,12 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL   = 'http://13.235.255.5:9000'
-        SONAR_TOKEN      = 'squ_84ff2db241b9d31828adf68516f6fa38a4c61769' // updated SonarQube token
-        NEXUS_URL        = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
-        NEXUS_CRED       = credentials('nexus-credentials')
-        IMAGE_NAME       = 'taskmanager'
-        DOCKER_REGISTRY  = 'docker.io/akshaysriramoju'
+        SONAR_HOST_URL  = 'http://13.235.255.5:9000'
+        SONAR_TOKEN     = credentials('sonar-token1') // use Jenkins secret credential ID
+        NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
+        NEXUS_CRED      = credentials('nexus-credentials')
+        IMAGE_NAME      = 'taskmanager'
+        DOCKER_REGISTRY = 'docker.io/akshaysriramoju'
     }
 
     stages {
@@ -25,23 +25,22 @@ pipeline {
 
         stage('Code Quality - SonarQube') {
             steps {
-                withSonarQubeEnv('SonarQubeServer') { // your SonarQube installation name
-                sh """
-                mvn clean verify sonar:sonar \
-                -Dsonar.projectKey=taskmanager \
-                -Dsonar.projectName=taskmanager \
-                -Dsonar.host.url=http://13.235.255.5:9000 \
-                -Dsonar.token=squ_84ff2db241b9d31828adf68516f6fa38a4c61769
-            """
+                withSonarQubeEnv('SonarQubeServer') {
+                    sh """
+                        mvn clean verify sonar:sonar \
+                        -Dsonar.projectKey=taskmanager \
+                        -Dsonar.projectName=taskmanager \
+                        -Dsonar.host.url=${SONAR_HOST_URL} \
+                        -Dsonar.login=${SONAR_TOKEN}
+                    """
+                }
+            }
         }
-    }
-}
-
 
         stage('Quality Gate') {
             steps {
                 script {
-                    timeout(time: 10, unit: 'MINUTES') {  // reduced timeout
+                    timeout(time: 10, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
                             error "Pipeline aborted due to quality gate failure: ${qg.status}"
