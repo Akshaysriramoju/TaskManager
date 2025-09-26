@@ -11,10 +11,10 @@ pipeline {
         NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED      = credentials('nexus-credentials')
         APP_PORT        = '8080'
-        EC2_USER        = 'ubuntu'  // or 'ec2-user' depending on your AMI
-        EC2_HOST        = 'http://13.235.255.5/'
+        EC2_USER        = 'ubuntu'           // adjust if your AMI uses 'ec2-user'
+        EC2_HOST        = '13.235.255.5'    // remove http://
         REMOTE_APP_DIR  = '/var/www/taskmanager'
-        DOMAIN_NAME     = 'your-domain.com' // if using domain
+        DOMAIN_NAME     = 'your-domain.com' // use your actual domain or EC2 public IP
     }
 
     stages {
@@ -93,7 +93,7 @@ pipeline {
             }
         }
 
-        stage('Deploy Latest JAR on EC2 via SSH & Nginx') {
+        stage('Deploy Latest JAR on EC2') {
             steps {
                 sshagent(['ec2-deploy-key']) {
                     sh """
@@ -111,12 +111,11 @@ pipeline {
                                 echo "Stopped existing app (PID: \$PID)"
                             fi
 
-                            # Start new version
+                            # Start new version in background
                             nohup java -jar ${REMOTE_APP_DIR}/taskmanager-${env.VERSION}.jar --server.port=${APP_PORT} > ${REMOTE_APP_DIR}/app.log 2>&1 &
 
-                            # Remove default Nginx page and configure reverse proxy
+                            # Configure Nginx reverse proxy
                             sudo rm -f /etc/nginx/sites-enabled/default
-
                             if [ ! -f /etc/nginx/sites-available/taskmanager ]; then
                                 echo "server {
                                     listen 80;
@@ -133,11 +132,10 @@ pipeline {
                                 sudo ln -s /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
                             fi
 
-                            # Test and reload Nginx
                             sudo nginx -t && sudo systemctl reload nginx
                         '
                     """
-                    echo "Deployment Completed. Access your app at http://${EC2_HOST}/"
+                    echo "Deployment Completed. Access your app at http://${DOMAIN_NAME}/ or http://${EC2_HOST}/"
                 }
             }
         }
