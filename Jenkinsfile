@@ -178,8 +178,7 @@
 //     }
 // }
 
-
-pipeline {
+ pipeline {
     agent any
 
     triggers {
@@ -214,12 +213,11 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    def version = "${BUILD_NUMBER}"
-                    env.VERSION = version
+                    // Use the JAR produced by Maven
+                    def jarName = sh(script: "ls target/*.jar | grep -v 'original' | head -n 1", returnStdout: true).trim()
                     sh """
-                        docker build --build-arg JAR_FILE=target/taskmanager-${version}.jar \
-                                     -t ${IMAGE_NAME}:${version} .
-                        docker tag ${IMAGE_NAME}:${version} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${version}
+                        docker build --build-arg JAR_FILE=${jarName} \
+                                     -t ${DOCKER_REGISTRY}/${IMAGE_NAME} .
                     """
                 }
             }
@@ -234,7 +232,7 @@ pipeline {
                 )]) {
                     sh """
                         echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}
                         docker logout
                     """
                 }
@@ -251,10 +249,10 @@ pipeline {
 
                             # Stop and remove old container if exists
                             docker rm -f ${IMAGE_NAME} || true
-                            docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                            docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}
                             
                             # Run container
-                            docker run -d --name ${IMAGE_NAME} -p ${APP_PORT}:${APP_PORT} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                            docker run -d --name ${IMAGE_NAME} -p ${APP_PORT}:${APP_PORT} ${DOCKER_REGISTRY}/${IMAGE_NAME}
 
                             # Configure Nginx
                             sudo rm -f /etc/nginx/sites-enabled/default
