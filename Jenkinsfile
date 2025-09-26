@@ -10,11 +10,13 @@ pipeline {
         SONAR_TOKEN     = credentials('sonar-token1')
         NEXUS_URL       = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED      = credentials('nexus-credentials')
+        DOCKER_REGISTRY = 'docker.io/akshaysriramoju'
+        IMAGE_NAME      = 'taskmanager'
         APP_PORT        = '8080'
-        EC2_USER        = 'ubuntu'          // change if AMI uses ec2-user
-        EC2_HOST        = '13.235.255.5'    // EC2 public IP (no http://)
+        EC2_USER        = 'ubuntu'
+        EC2_HOST        = '13.235.255.5'
         REMOTE_APP_DIR  = '/var/www/taskmanager'
-        DOMAIN_NAME     = '13.235.255.5'    // use domain if you have, else keep IP
+        DOMAIN_NAME     = '13.235.255.5'  // or your real domain
     }
 
     stages {
@@ -26,7 +28,7 @@ pipeline {
             }
         }
 
-        stage('Code Quality - SonarQube') {
+        stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQubeServer') {
                     sh """
@@ -47,9 +49,9 @@ pipeline {
                     timeout(time: 15, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
-                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                            error "❌ Quality Gate failed: ${qg.status}"
                         } else {
-                            echo "Quality Gate passed: ${qg.status}"
+                            echo "✅ Quality Gate passed: ${qg.status}"
                         }
                     }
                 }
@@ -65,7 +67,7 @@ pipeline {
                     ).trim()
 
                     env.VERSION = "${baseVersion}-${env.BUILD_NUMBER}"
-                    echo "Unique Project Version: ${env.VERSION}"
+                    echo "📦 Project Version: ${env.VERSION}"
 
                     sh "mvn versions:set -DnewVersion=${env.VERSION}"
                     sh "mvn versions:commit"
@@ -75,12 +77,11 @@ pipeline {
 
         stage('Build JAR') {
             steps {
-                echo "Building Spring Boot JAR..."
                 sh 'mvn clean package -DskipTests'
             }
         }
 
-        stage('Upload Artifact to Nexus') {
+        stage('Upload JAR to Nexus') {
             steps {
                 sh """
                     curl -v -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} \
@@ -90,7 +91,33 @@ pipeline {
             }
         }
 
-        stage('Deploy on EC2') {
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    docker build --build-arg JAR_FILE=target/taskmanager-${env.VERSION}.jar \
+                                 -t ${IMAGE_NAME}:${env.VERSION} .
+                    docker tag ${IMAGE_NAME}:${env.VERSION} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                """
+            }
+        }
+
+        stage('Push Docker Image to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                        docker logout
+                    """
+                }
+            }
+        }
+
+        stage('Deploy JAR from Nexus on EC2 via Nginx') {
             steps {
                 sshagent(['ec2-deploy-key']) {
                     sh """
@@ -102,18 +129,18 @@ pipeline {
                             curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} \
                             -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
 
-                            # Stop existing app if running
+                            # Stop running app
                             PID=\$(pgrep -f "java -jar")
                             if [ ! -z "\$PID" ]; then
                                 kill -9 \$PID
-                                echo "Stopped existing app (PID: \$PID)"
+                                echo "Stopped app (PID: \$PID)"
                             fi
 
-                            # Start new version
+                            # Start app
                             nohup java -jar ${REMOTE_APP_DIR}/taskmanager-${env.VERSION}.jar \
                                 --server.port=${APP_PORT} > ${REMOTE_APP_DIR}/app.log 2>&1 &
 
-                            # Configure Nginx reverse proxy
+                            # Configure Nginx
                             sudo rm -f /etc/nginx/sites-enabled/default
                             echo "server {
                                 listen 80;
@@ -133,10 +160,9 @@ pipeline {
                         '
                     """
                 }
-                echo "✅ Deployment Completed. Access your app at http://${DOMAIN_NAME}/"
+                echo "🚀 Deployment Completed → http://${DOMAIN_NAME}/"
             }
         }
-
     }
 
     post {
@@ -144,10 +170,10 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Pipeline completed successfully!"
+            echo "✅ Pipeline completed successfully!"
         }
         failure {
-            echo "Pipeline failed!"
+            echo "❌ Pipeline failed!"
         }
     }
 }
