@@ -192,7 +192,6 @@
         EC2_USER        = 'ubuntu'
         EC2_HOST        = '13.235.255.5'
         REMOTE_APP_DIR  = '/home/ubuntu/taskmanager'
-        DOMAIN_NAME     = '13.235.255.5'  // or your real domain
     }
 
     stages {
@@ -207,6 +206,12 @@
         stage('Build JAR') {
             steps {
                 sh 'mvn clean package -DskipTests'
+                script {
+                    def jarExists = sh(script: 'ls target/*.jar | grep -v "original" | wc -l', returnStdout: true).trim()
+                    if (jarExists == "0") {
+                        error "❌ JAR file not found in target/. Pipeline stopping."
+                    }
+                }
             }
         }
 
@@ -216,7 +221,7 @@
                     def jarName = sh(script: "ls target/*.jar | grep -v 'original' | head -n 1", returnStdout: true).trim()
                     sh """
                         docker build --build-arg JAR_FILE=${jarName} \
-                                     -t ${DOCKER_REGISTRY}/${IMAGE_NAME} .
+                                     -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest .
                     """
                 }
             }
@@ -231,54 +236,41 @@
                 )]) {
                     sh """
                         echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}
+                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
                         docker logout
                     """
                 }
             }
         }
 
-        stage('Deploy Docker Container on EC2 via Nginx') {
+        stage('Deploy on EC2') {
             steps {
                 sshagent(['ec2-deploy-key']) {
                     sh """
-                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
-                            mkdir -p ${REMOTE_APP_DIR}
-                            cd ${REMOTE_APP_DIR}
-
-                            # Stop and remove old container if exists
-                            docker rm -f taskmanager || true
-
-                            # Pull latest image and run container
-                            docker pull ${DOCKER_REGISTRY}/taskmanager:latest
-                            docker run -d --name taskmanager -p 8082:8080 ${DOCKER_REGISTRY}/taskmanager:latest
-
-                            # Configure Nginx
-                            sudo rm -f /etc/nginx/sites-enabled/default
-                            sudo tee /etc/nginx/sites-available/taskmanager > /dev/null << 'NGINX_CONF'
-server {
-    listen 80;
-    server_name ${EC2_HOST};
-
-    location / {
-        proxy_pass http://localhost:8082;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-NGINX_CONF
-
-                            sudo ln -sf /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
-                            sudo nginx -t && sudo systemctl reload nginx
-EOF
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \\
+                        "mkdir -p ${REMOTE_APP_DIR} && cd ${REMOTE_APP_DIR} && \\
+                        docker rm -f taskmanager || true && \\
+                        docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest && \\
+                        docker run -d --name taskmanager -p 8082:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest && \\
+                        sudo rm -f /etc/nginx/sites-enabled/default && \\
+                        echo \\"server { \\
+                            listen 80; \\
+                            server_name ${EC2_HOST}; \\
+                            location / { \\
+                                proxy_pass http://localhost:8082; \\
+                                proxy_set_header Host \\\\\$host; \\
+                                proxy_set_header X-Real-IP \\\\\$remote_addr; \\
+                                proxy_set_header X-Forwarded-For \\\\\$proxy_add_x_forwarded_for; \\
+                                proxy_set_header X-Forwarded-Proto \\\\\$scheme; \\
+                            } \\
+                        }\\" | sudo tee /etc/nginx/sites-available/taskmanager && \\
+                        sudo ln -sf /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/ && \\
+                        sudo nginx -t && sudo systemctl reload nginx"
                     """
                 }
-                echo "🚀 Deployment Completed → http://${EC2_HOST}/"
+                echo "🚀 Deployment completed → http://${EC2_HOST}/"
             }
         }
-
     }
 
     post {
