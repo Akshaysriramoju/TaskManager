@@ -97,7 +97,8 @@ pipeline {
             steps {
                 script {
                     sh """
-                        docker build -t ${IMAGE_NAME}:${env.VERSION} .
+                        docker build --build-arg JAR_FILE=target/taskmanager-${env.VERSION}.jar \
+                                     -t ${IMAGE_NAME}:${env.VERSION} .
                         docker tag ${IMAGE_NAME}:${env.VERSION} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                     """
                 }
@@ -125,7 +126,6 @@ pipeline {
         stage('Deploy on EC2 with NGINX') {
             steps {
                 script {
-                    // Stop and remove previous container
                     sh """
                         docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                         docker stop ${IMAGE_NAME} || true
@@ -133,10 +133,10 @@ pipeline {
                         docker run -d --name ${IMAGE_NAME} -p 8080:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                     """
 
-                    // Optionally copy JAR from Nexus to NGINX static folder
+                    // Optional: Copy JAR from Nexus to NGINX folder if needed
                     sh """
                         curl -u ${NEXUS_CRED_USR}:${NEXUS_CRED_PSW} -O ${NEXUS_URL}taskmanager-${env.VERSION}.jar
-                        # cp taskmanager-${env.VERSION}.jar /usr/share/nginx/html/  # if needed
+                        # cp taskmanager-${env.VERSION}.jar /usr/share/nginx/html/
                     """
                 }
                 echo "Deployment Completed on EC2/NGINX."

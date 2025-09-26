@@ -1,15 +1,11 @@
-# Use OpenJDK 17 image
+# Dockerfile
 FROM openjdk:17-jdk-slim
 
-# Set work directory
 WORKDIR /app
 
-# Copy JAR
-COPY target/taskmanager-0.0.1-SNAPSHOT.jar app.jar
+ARG JAR_FILE
+COPY ${JAR_FILE} app.jar
 
-# Expose port
 EXPOSE 8080
 
-# Run JAR
-ENTRYPOINT ["java","-jar","app.jar"]
-
+ENTRYPOINT ["java","-jar","/app/app.jar"]
