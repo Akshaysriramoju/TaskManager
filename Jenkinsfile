@@ -29,8 +29,10 @@ pipeline {
                 withSonarQubeEnv('SonarQubeServer') {
                     sh """
                         mvn clean verify sonar:sonar \
+                          -Dsonar.projectKey=com.example:taskmanager \
                           -Dsonar.host.url=${SONAR_HOST_URL} \
-                          -Dsonar.login=${SONAR_TOKEN}
+                          -Dsonar.login=${SONAR_TOKEN} \
+                          -Dsonar.language=java
                     """
                 }
             }
