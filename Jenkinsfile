@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         SONAR_HOST_URL   = 'http://13.235.255.5:9000'
-        SONAR_TOKEN      = credentials('sonar-token')  // Ensure this matches the Jenkins credential ID
+        SONAR_TOKEN      = 'squ_84ff2db241b9d31828adf68516f6fa38a4c61769' // updated SonarQube token
         NEXUS_URL        = 'http://13.235.255.5:8081/repository/taskmanager-releases/'
         NEXUS_CRED       = credentials('nexus-credentials')
         IMAGE_NAME       = 'taskmanager'
@@ -31,7 +31,7 @@ pipeline {
                             -Dsonar.projectKey=taskmanager \
                             -Dsonar.projectName='taskmanager' \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.token=${SONAR_TOKEN}
+                            -Dsonar.login=${SONAR_TOKEN}
                     """
                 }
             }
@@ -40,12 +40,24 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    timeout(time: 1, unit: 'HOURS') {
+                    timeout(time: 10, unit: 'MINUTES') {  // reduced timeout
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
                             error "Pipeline aborted due to quality gate failure: ${qg.status}"
                         }
                     }
+                }
+            }
+        }
+
+        stage('Set Version') {
+            steps {
+                script {
+                    env.VERSION = sh(
+                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
+                        returnStdout: true
+                    ).trim()
+                    echo "Project Version: ${env.VERSION}"
                 }
             }
         }
@@ -60,14 +72,9 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    def version = sh(
-                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
-                        returnStdout: true
-                    ).trim()
-
                     sh """
-                        docker build -t ${IMAGE_NAME}:${version} .
-                        docker tag ${IMAGE_NAME}:${version} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${version}
+                        docker build -t ${IMAGE_NAME}:${env.VERSION} .
+                        docker tag ${IMAGE_NAME}:${env.VERSION} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                     """
                 }
             }
@@ -76,11 +83,6 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 script {
-                    def version = sh(
-                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
-                        returnStdout: true
-                    ).trim()
-
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-credentials',
                         usernameVariable: 'DOCKERHUB_USR',
@@ -88,7 +90,7 @@ pipeline {
                     )]) {
                         sh """
                             echo "${DOCKERHUB_PSW}" | docker login -u "${DOCKERHUB_USR}" --password-stdin
-                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${version}
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                             docker logout
                         """
                     }
@@ -99,27 +101,23 @@ pipeline {
         stage('Deploy on EC2') {
             steps {
                 script {
-                    def version = sh(
-                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
-                        returnStdout: true
-                    ).trim()
-
                     sh """
-                        docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${version}
+                        docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                         docker stop ${IMAGE_NAME} || true
                         docker rm ${IMAGE_NAME} || true
-                        docker run -d --name ${IMAGE_NAME} -p 8080:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:${version}
+                        docker run -d --name ${IMAGE_NAME} -p 8080:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
                     """
                 }
                 echo "Deployment Completed on EC2."
             }
         }
 
-        stage('Clean Workspace') {
-            steps {
-                echo "Cleaning workspace..."
-                cleanWs()
-            }
+    }
+
+    post {
+        always {
+            echo "Cleaning workspace..."
+            cleanWs()
         }
     }
 }
