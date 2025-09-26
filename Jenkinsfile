@@ -240,7 +240,7 @@
         }
 
         stage('Deploy Docker Container on EC2 via Nginx') {
-             steps {
+    steps {
         sshagent(['ec2-deploy-key']) {
             sh """
                 ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
@@ -249,26 +249,26 @@
                     cd /home/ubuntu/taskmanager
 
                     # Stop and remove old container if exists
-                    docker rm -f ${IMAGE_NAME} || true
+                    docker rm -f taskmanager || true
 
                     # Pull latest image
-                    docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                    docker pull ${DOCKER_REGISTRY}/taskmanager:latest
                     
                     # Run container mapping container 8080 → host 8082
-                    docker run -d --name ${IMAGE_NAME} -p 8082:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                    docker run -d --name taskmanager -p 8082:8080 ${DOCKER_REGISTRY}/taskmanager:latest
 
                     # Configure Nginx
                     sudo rm -f /etc/nginx/sites-enabled/default
                     echo "server {
                         listen 80;
-                        server_name ${DOMAIN_NAME};
+                        server_name ${EC2_HOST};
 
                         location / {
                             proxy_pass http://localhost:8082;
-                            proxy_set_header Host \$host;
-                            proxy_set_header X-Real-IP \$remote_addr;
-                            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                            proxy_set_header X-Forwarded-Proto \$scheme;
+                            proxy_set_header Host \\$host;
+                            proxy_set_header X-Real-IP \\$remote_addr;
+                            proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
+                            proxy_set_header X-Forwarded-Proto \\$scheme;
                         }
                     }" | sudo tee /etc/nginx/sites-available/taskmanager
 
@@ -277,7 +277,7 @@
                 '
             """
         }
-        echo "🚀 Deployment Completed → http://${DOMAIN_NAME}/"
+        echo "🚀 Deployment Completed → http://${EC2_HOST}/"
     }
 }
 
