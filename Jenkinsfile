@@ -240,43 +240,47 @@
         }
 
         stage('Deploy Docker Container on EC2 via Nginx') {
-            steps {
-                sshagent(['ec2-deploy-key']) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                            mkdir -p ${REMOTE_APP_DIR}
-                            cd ${REMOTE_APP_DIR}
+             steps {
+        sshagent(['ec2-deploy-key']) {
+            sh """
+                ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
+                    # Create app directory in home (no sudo needed)
+                    mkdir -p /home/ubuntu/taskmanager
+                    cd /home/ubuntu/taskmanager
 
-                            # Stop and remove old container if exists
-                            docker rm -f ${IMAGE_NAME} || true
-                            docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}
-                            
-                            # Run container
-                            docker run -d --name ${IMAGE_NAME} -p ${APP_PORT}:${APP_PORT} ${DOCKER_REGISTRY}/${IMAGE_NAME}
+                    # Stop and remove old container if exists
+                    docker rm -f ${IMAGE_NAME} || true
 
-                            # Configure Nginx
-                            sudo rm -f /etc/nginx/sites-enabled/default
-                            echo "server {
-                                listen 80;
-                                server_name ${DOMAIN_NAME};
+                    # Pull latest image
+                    docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                    
+                    # Run container mapping container 8080 → host 8082
+                    docker run -d --name ${IMAGE_NAME} -p 8082:8080 ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
 
-                                location / {
-                                    proxy_pass http://localhost:${APP_PORT};
-                                    proxy_set_header Host \$host;
-                                    proxy_set_header X-Real-IP \$remote_addr;
-                                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                                    proxy_set_header X-Forwarded-Proto \$scheme;
-                                }
-                            }" | sudo tee /etc/nginx/sites-available/taskmanager
+                    # Configure Nginx
+                    sudo rm -f /etc/nginx/sites-enabled/default
+                    echo "server {
+                        listen 80;
+                        server_name ${DOMAIN_NAME};
 
-                            sudo ln -sf /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
-                            sudo nginx -t && sudo systemctl reload nginx
-                        '
-                    """
-                }
-                echo "🚀 Deployment Completed → http://${DOMAIN_NAME}/"
-            }
+                        location / {
+                            proxy_pass http://localhost:8082;
+                            proxy_set_header Host \$host;
+                            proxy_set_header X-Real-IP \$remote_addr;
+                            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                            proxy_set_header X-Forwarded-Proto \$scheme;
+                        }
+                    }" | sudo tee /etc/nginx/sites-available/taskmanager
+
+                    sudo ln -sf /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/
+                    sudo nginx -t && sudo systemctl reload nginx
+                '
+            """
         }
+        echo "🚀 Deployment Completed → http://${DOMAIN_NAME}/"
+    }
+}
+
     }
 
     post {
