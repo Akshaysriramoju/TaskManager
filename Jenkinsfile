@@ -156,7 +156,7 @@ pipeline {
                 '
             """
         }
-        echo "✅ Deployment completed: Frontend → http://${DOMAIN_NAME}/, Backend → ${EC2_HOST}:${APP_PORT}"
+        echo " Deployment completed: Frontend → http://${DOMAIN_NAME}/, Backend → ${EC2_HOST}:${APP_PORT}"
     }
 }
 
