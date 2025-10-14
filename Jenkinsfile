@@ -185,7 +185,7 @@ pipeline {
 
     environment {
         SONAR_HOST_URL = "http://13.234.11.123:9000"
-        SONAR_TOKEN = credentials('sonar-token1') // Use Jenkins credentials
+        SONAR_TOKEN = credentials('SONAR_TOKEN') // Use Jenkins credentials
     }
 
     stages {
@@ -196,19 +196,20 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQubeServer') {
-                    sh '''
-                        mvn clean verify sonar:sonar \
-                        -Dsonar.projectKey=taskmanager \
-                        -Dsonar.projectName=taskmanager \
-                        -Dsonar.host.url=$SONAR_HOST_URL \
-                        -Dsonar.login=$SONAR_TOKEN \
-                        -DskipTests=false
-                    '''
-                }
-            }
+    steps {
+        withSonarQubeEnv('SonarQubeServer') {
+            sh """
+                mvn clean verify sonar:sonar \
+                -Dsonar.projectKey=taskmanager \
+                -Dsonar.projectName=taskmanager \
+                -Dsonar.host.url=$SONAR_HOST_URL \
+                -Dsonar.login=$SONAR_TOKEN \
+                -DskipTests=false
+            """
         }
+    }
+}
+
 
         stage('Quality Gate') {
             steps {
@@ -219,3 +220,4 @@ pipeline {
         }
     }
 }
+
