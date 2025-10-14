@@ -179,12 +179,14 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() // Trigger the pipeline whenever there is a push to GitHub
+        githubPush() // Trigger on GitHub push
     }
 
     environment {
         SONAR_HOST_URL = "http://13.234.11.123:9000"
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // Use Jenkins credentials
+        SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
+        NEXUS_CRED = credentials('NEXUS_CRED')     // Nexus username:password stored as a single Jenkins credential
+        NEXUS_URL = "http://13.234.11.123:8081/repository/taskmanager-releases/"  // Update with your Nexus repository URL
     }
 
     stages {
@@ -246,6 +248,22 @@ pipeline {
                 sh 'mvn clean package -DskipTests'
             }
         }
+
+        stage('Upload JAR to Nexus') {
+            steps {
+                script {
+                    // Split the stored credentials into username and password
+                    def nexusCredentials = NEXUS_CRED.split(':')
+                    def nexusUser = nexusCredentials[0]
+                    def nexusPassword = nexusCredentials[1]
+
+                    sh """
+                        curl -v -u ${nexusUser}:${nexusPassword} \
+                        --upload-file target/taskmanager-${env.VERSION}.jar \
+                        ${NEXUS_URL}taskmanager-${env.VERSION}.jar
+                    """
+                }
+            }
+        }
     }
 }
-
