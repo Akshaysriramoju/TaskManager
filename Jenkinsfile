@@ -185,8 +185,10 @@ pipeline {
     environment {
         SONAR_HOST_URL = "http://13.234.11.123:9000"
         SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
-        NEXUS_CRED = credentials('NEXUS_CREDENTIALS')     // Nexus username:password stored as a single Jenkins credential
-        NEXUS_URL = "http://13.234.11.123:8081/repository/taskmanager-releases/"  // Update with your Nexus repository URL
+        NEXUS_CRED = credentials('NEXUS_CREDENTIALS') // Nexus username:password stored as single Jenkins credential
+        NEXUS_URL = "http://13.234.11.123:8081/repository/taskmanager-releases"
+        GROUP_ID = "com/example"  // Convert dots to slashes for Maven repo path
+        ARTIFACT_ID = "taskmanager"
     }
 
     stages {
@@ -257,10 +259,16 @@ pipeline {
                     def nexusUser = nexusCredentials[0]
                     def nexusPassword = nexusCredentials[1]
 
+                    // Construct proper Maven path for Nexus 2 repository
+                    def jarFile = "target/${ARTIFACT_ID}-${env.VERSION}.jar"
+                    def nexusPath = "${NEXUS_URL}/${GROUP_ID}/${ARTIFACT_ID}/${env.VERSION}/${ARTIFACT_ID}-${env.VERSION}.jar"
+
+                    echo "Uploading JAR to Nexus: ${nexusPath}"
+
                     sh """
                         curl -v -u ${nexusUser}:${nexusPassword} \
-                        --upload-file target/taskmanager-${env.VERSION}.jar \
-                        ${NEXUS_URL}taskmanager-${env.VERSION}.jar
+                        --upload-file ${jarFile} \
+                        ${nexusPath}
                     """
                 }
             }
