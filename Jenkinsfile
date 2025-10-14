@@ -175,7 +175,6 @@
 //     }
 // }
 
-
 pipeline {
     agent any
 
@@ -196,27 +195,55 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-    steps {
-        withSonarQubeEnv('SonarQubeServer') {
-            sh '''
-                mvn clean verify sonar:sonar \
-                -Dsonar.projectKey=taskmanager \
-                -Dsonar.projectName=taskmanager \
-                -Dsonar.host.url=$SONAR_HOST_URL \
-                -Dsonar.login=$SONAR_TOKEN \
-                -Dspring.profiles.active=test
-            '''
+            steps {
+                withSonarQubeEnv('SonarQubeServer') {
+                    sh '''
+                        mvn clean verify sonar:sonar \
+                        -Dsonar.projectKey=taskmanager \
+                        -Dsonar.projectName=taskmanager \
+                        -Dsonar.host.url=$SONAR_HOST_URL \
+                        -Dsonar.login=$SONAR_TOKEN \
+                        -Dspring.profiles.active=test
+                    '''
+                }
+            }
         }
-    }
-}
-
-
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    timeout(time: 3, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Quality Gate failed: ${qg.status}"
+                        } else {
+                            echo "Quality Gate passed: ${qg.status}"
+                        }
+                    }
                 }
+            }
+        }
+
+        stage('Set Version') {
+            steps {
+                script {
+                    def baseVersion = sh(
+                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
+                        returnStdout: true
+                    ).trim()
+
+                    env.VERSION = "${baseVersion}-${env.BUILD_NUMBER}"
+                    echo "Project Version: ${env.VERSION}"
+
+                    sh "mvn versions:set -DnewVersion=${env.VERSION}"
+                    sh "mvn versions:commit"
+                }
+            }
+        }
+
+        stage('Build JAR') {
+            steps {
+                sh 'mvn clean package -DskipTests'
             }
         }
     }
