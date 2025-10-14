@@ -183,10 +183,10 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL = "http://13.234.11.123:9000"
+        SONAR_HOST_URL = "http://13.233.135.138:9000"
         SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
         NEXUS_CRED = credentials('NEXUS_CREDENTIALS') // Nexus username:password stored as single Jenkins credential
-        NEXUS_URL = "http://13.234.11.123:8081/repository/taskmanager-releases"
+        NEXUS_URL = "http://13.233.135.138:8081/repository/taskmanager-releases"
         GROUP_ID = "com/example"  // Convert dots to slashes for Maven repo path
         ARTIFACT_ID = "taskmanager"
     }
