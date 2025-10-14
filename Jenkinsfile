@@ -189,6 +189,8 @@ pipeline {
         NEXUS_URL = "http://13.233.135.138:8081/repository/taskmanager-releases"
         GROUP_ID = "com/example"  // Convert dots to slashes for Maven repo path
         ARTIFACT_ID = "taskmanager"
+        IMAGE_NAME = "akshaysriramoju/taskmanager"   // Docker image name
+        DOCKER_REGISTRY = "docker.io/akshaysriramoju" // Replace with your DockerHub username
     }
 
     stages {
@@ -269,6 +271,32 @@ pipeline {
                         curl -v -u ${nexusUser}:${nexusPassword} \
                         --upload-file ${jarFile} \
                         ${nexusPath}
+                    """
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    docker build --build-arg JAR_FILE=target/${ARTIFACT_ID}-${env.VERSION}.jar \
+                                 -t ${IMAGE_NAME}:${env.VERSION} .
+                    docker tag ${IMAGE_NAME}:${env.VERSION} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                """
+            }
+        }
+
+        stage('Push Docker Image to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+                        docker logout
                     """
                 }
             }
