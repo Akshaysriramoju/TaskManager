@@ -198,17 +198,18 @@ pipeline {
         stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQubeServer') {
-            sh """
+            sh '''
                 mvn clean verify sonar:sonar \
                 -Dsonar.projectKey=taskmanager \
                 -Dsonar.projectName=taskmanager \
                 -Dsonar.host.url=$SONAR_HOST_URL \
                 -Dsonar.login=$SONAR_TOKEN \
-                -DskipTests=false
-            """
+                -Dspring.profiles.active=test
+            '''
         }
     }
 }
+
 
 
         stage('Quality Gate') {
