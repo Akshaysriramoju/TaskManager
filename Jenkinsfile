@@ -185,7 +185,7 @@ pipeline {
     environment {
         SONAR_HOST_URL = "http://13.234.11.123:9000"
         SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
-        NEXUS_CRED = credentials('NEXUS_CRED')     // Nexus username:password stored as a single Jenkins credential
+        NEXUS_CRED = credentials('NEXUS_CREDENTIALS')     // Nexus username:password stored as a single Jenkins credential
         NEXUS_URL = "http://13.234.11.123:8081/repository/taskmanager-releases/"  // Update with your Nexus repository URL
     }
 
