@@ -420,7 +420,7 @@ pipeline {
         // --- EC2 / deployment targets ---
         EC2_USER = "ubuntu"
         EC2_HOST = "52.66.228.227"                // <-- Public IP
-        REMOTE_DB_HOST = "172.31.18.171"           // <--- CRITICAL: EC2 PRIVATE IP
+        REMOTE_DB_HOST = "172.31.18.171"           // CRITICAL: EC2 PRIVATE IP
         REMOTE_FRONTEND_DIR = "/var/www/html"      // Nginx root
         REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
         BACKEND_HOST_PORT = "8084"                 // host port 
@@ -536,6 +536,7 @@ pipeline {
             }
         }
 
+        // --- CORRECTED: Ensures index.html is packaged correctly ---
         stage('Prepare Frontend') {
             steps {
                 script {
@@ -545,23 +546,21 @@ pipeline {
                     echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
 
                     sh """
-                        # 1. Temporarily copy the index.html to the workspace root for modification
+                        # 1. Temporarily copy index.html to workspace root
                         cp ${staticDir}/index.html index.html.temp || exit 1
                         
-                        # 2. Replace placeholder in the temporary index.html
+                        # 2. Modify the temporary index file
                         sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html.temp || true
-
-                        # 3. Create the zip archive with ALL static files, placing the zip in the root.
-                        zip -j ${zipName} ${staticDir}/*
                         
-                        # 4. DELETE the original index.html from INSIDE the zip (which was added in step 3)
-                        zip -d ${zipName} index.html 
+                        # 3. Rename the modified temporary file to index.html for correct packaging
+                        mv index.html.temp index.html
                         
-                        # 5. Add the MODIFIED index.html.temp file back into the zip, renaming it to index.html
-                        zip -u ${zipName} index.html.temp -j
-
-                        # 6. Clean up temporary file
-                        rm index.html.temp
+                        # 4. Create the zip archive with ALL static files from the source directory and the modified index.html.
+                        # The -j option is critical here. It adds the index.html from the root and overrides the one from ${staticDir}.
+                        zip -j ${zipName} index.html ${staticDir}/script.js ${staticDir}/styles.css
+                        
+                        # 5. Clean up temporary files
+                        rm index.html
                     """
                 }
             }
