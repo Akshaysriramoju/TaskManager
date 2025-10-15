@@ -7,6 +7,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource; // <-- NEW IMPORT
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -14,18 +15,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.hamcrest.Matchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc // Configures MockMvc for simulating API calls
+@AutoConfigureMockMvc 
 @ActiveProfiles("test") 
+// CRITICAL FIX: Forces the CORS property to a valid, non-wildcard value during testing
+@TestPropertySource(properties = {"app.cors.allowed-origin=http://localhost:8080"})
 class TaskControllerIntegrationTests {
 
     @Autowired
-    private MockMvc mockMvc; // Used to simulate HTTP requests
+    private MockMvc mockMvc; 
 
     @Autowired
-    private ObjectMapper objectMapper; // Utility for converting objects to JSON
+    private ObjectMapper objectMapper; 
 
-    // Helper class for creating a Task payload (Includes getters/setters to eliminate warnings)
-    @SuppressWarnings("unused") // Suppress warnings for methods used externally by Jackson
+    @SuppressWarnings("unused")
     private static class TaskPayload {
         private String title;
         private Boolean completed;
@@ -61,7 +63,7 @@ class TaskControllerIntegrationTests {
         String taskJson = objectMapper.writeValueAsString(newTask);
 
         // 2. Act & Assert: Send POST request to create the task
-        mockMvc.perform(post("/api/tasks") // Assuming your endpoint is /api/tasks
+        mockMvc.perform(post("/api/tasks")
                          .contentType(MediaType.APPLICATION_JSON)
                          .content(taskJson))
                 .andExpect(status().isOk())
@@ -71,6 +73,6 @@ class TaskControllerIntegrationTests {
         // 3. Act & Assert: Send GET request to retrieve all tasks (verifies Read logic)
         mockMvc.perform(get("/api/tasks"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1)))); // Should have at least the one we created
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1)))); 
     }
 }
