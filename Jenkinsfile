@@ -569,7 +569,7 @@ pipeline {
     }
 
 
-        // --- CORRECTED: Deploy to EC2 (Frontend + Backend docker) ---
+        /* ---------- FIXED: Deploy frontend + pull & restart backend container on EC2 ---------- */
         stage('Deploy to EC2 (Frontend + Backend docker)') {
             steps {
                 // SSH deploy using ssh-agent credential 'ec2-deploy-key' in Jenkins (must exist)
@@ -588,9 +588,13 @@ pipeline {
                                 # FRONTEND: deploy static files to nginx directory
                                 sudo mkdir -p ${REMOTE_FRONTEND_DIR}
                                 sudo rm -rf ${REMOTE_FRONTEND_DIR}/*
+                                
+                                # Use sudo for unzip/copy to ensure proper permissions on extracted files
                                 sudo unzip -o /tmp/frontend-${env.VERSION}.zip -d /tmp/frontend_deploy || true
                                 sudo cp -r /tmp/frontend_deploy/* ${REMOTE_FRONTEND_DIR}/
-                                rm -rf /tmp/frontend_deploy /tmp/frontend-${env.VERSION}.zip
+                                
+                                # *** CRITICAL FIX: Use SUDO for cleanup of root-owned files ***
+                                sudo rm -rf /tmp/frontend_deploy /tmp/frontend-${env.VERSION}.zip
 
                                 # BACKEND: ensure backend dir exists
                                 mkdir -p ${REMOTE_BACKEND_DIR}
@@ -603,7 +607,6 @@ pipeline {
                                 docker rm -f ${ARTIFACT_ID} || true
 
                                 # Start new container mapped to host port ${BACKEND_HOST_PORT}
-                                # *** CORRECTED DB URL, USER, AND PASSWORD ***
                                 docker run -d --name ${ARTIFACT_ID} -p ${BACKEND_HOST_PORT}:${BACKEND_CONTAINER_PORT} \
                                   --env SPRING_DATASOURCE_URL=jdbc:mysql://${REMOTE_DB_HOST}:3306/task_manager_db \
                                   --env SPRING_DATASOURCE_USERNAME=taskuser \
