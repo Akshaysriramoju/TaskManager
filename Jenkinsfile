@@ -408,10 +408,10 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL = "http://52.66.228.227:9000"
+        SONAR_HOST_URL = "http://65.2.36.235:9000"
         SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
         NEXUS_CRED = credentials('NEXUS_CREDENTIALS') // Nexus username:password stored as single Jenkins credential
-        NEXUS_URL = "http://52.66.228.227:8081/repository/taskmanager-releases/"
+        NEXUS_URL = "http://65.2.36.235:8081/repository/taskmanager-releases/"
         GROUP_ID = "com/example"   // Convert dots to slashes for Maven repo path
         ARTIFACT_ID = "taskmanager"
         IMAGE_NAME = "taskmanager"   // Docker image name
@@ -419,7 +419,7 @@ pipeline {
 
         // --- EC2 / deployment targets ---
         EC2_USER = "ubuntu"
-        EC2_HOST = "52.66.228.227"                // <-- Public IP
+        EC2_HOST = "65.2.36.235"                // <-- Public IP
         REMOTE_DB_HOST = "172.31.18.171"           // CRITICAL: EC2 PRIVATE IP
         REMOTE_FRONTEND_DIR = "/var/www/html"      // Nginx root
         REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
