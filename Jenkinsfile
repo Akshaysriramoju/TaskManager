@@ -419,7 +419,7 @@ pipeline {
 
         // --- EC2 / deployment targets ---
         EC2_USER = "ubuntu"
-        EC2_HOST = "65.2.36.235"                // <-- Public IP
+        EC2_HOST = "65.2.36.235"                // <-- Public IP (Nginx entry point)
         REMOTE_DB_HOST = "172.31.18.171"           // CRITICAL: EC2 PRIVATE IP
         REMOTE_FRONTEND_DIR = "/var/www/html"      // Nginx root
         REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
@@ -536,27 +536,30 @@ pipeline {
             }
         }
 
-        // --- CORRECTED: Ensures index.html is packaged correctly ---
+        // --- FIXED: Removes the port from the URL, assumes Nginx handles port 80 ---
         stage('Prepare Frontend') {
             steps {
                 script {
                     def staticDir = "src/main/resources/static"
                     def zipName = "frontend-${env.VERSION}.zip"
-                    def apiUrl = "http://${EC2_HOST}:${BACKEND_HOST_PORT}"
-                    echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
+                    
+                    // CRITICAL FIX: The API URL must only be the public IP (EC2_HOST) 
+                    // since Nginx is listening on port 80.
+                    def apiUrl = "http://${EC2_HOST}" 
+                    
+                    echo "Replacing frontend API placeholder with: ${apiUrl}/api?v=${env.VERSION}"
 
                     sh """
                         # 1. Temporarily copy index.html to workspace root
                         cp ${staticDir}/index.html index.html.temp || exit 1
                         
-                        # 2. Modify the temporary index file
-                        sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html.temp || true
+                        # 2. Modify the temporary index file. The /api is appended here.
+                        sed -i 's|__API_URL__|${apiUrl}/api?v=${env.VERSION}|g' index.html.temp || true
                         
                         # 3. Rename the modified temporary file to index.html for correct packaging
                         mv index.html.temp index.html
                         
-                        # 4. Create the zip archive with ALL static files from the source directory and the modified index.html.
-                        # The -j option is critical here. It adds the index.html from the root and overrides the one from ${staticDir}.
+                        # 4. Create the zip archive with ALL static files, ensuring index.html is the modified one.
                         zip -j ${zipName} index.html ${staticDir}/script.js ${staticDir}/styles.css
                         
                         # 5. Clean up temporary files
