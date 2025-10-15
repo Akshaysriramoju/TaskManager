@@ -399,7 +399,6 @@
 // }
 
 
-
 pipeline {
     agent any
 
@@ -435,26 +434,26 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-        steps {
-            withSonarQubeEnv('SonarQubeServer') {
-                sh '''
-                    # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
-                    # Executes tests and generates the jacoco.xml report.
-                    mvn clean verify org.jacoco:jacoco-maven-plugin:report
-                    
-                    # 2. RUN SONAR ANALYSIS
-                    # CRITICAL FIX: The 'mvn' prefix is added here to make it a valid shell command.
-                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                        -Dsonar.projectKey=taskmanager \
-                        -Dsonar.projectName=taskmanager \
-                        -Dsonar.host.url=$SONAR_HOST_URL \
-                        -Dsonar.login=$SONAR_TOKEN \
-                        -Dspring.profiles.active=test \
-                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-                '''
+            steps {
+                withSonarQubeEnv('SonarQubeServer') {
+                    sh '''
+                        # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
+                        # Executes tests and generates the jacoco.xml report.
+                        mvn clean verify org.jacoco:jacoco-maven-plugin:report
+                        
+                        # 2. RUN SONAR ANALYSIS
+                        # CRITICAL FIX: The 'mvn' prefix is added here to make it a valid shell command.
+                        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                            -Dsonar.projectKey=taskmanager \
+                            -Dsonar.projectName=taskmanager \
+                            -Dsonar.host.url=$SONAR_HOST_URL \
+                            -Dsonar.login=$SONAR_TOKEN \
+                            -Dspring.profiles.active=test \
+                            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
+                }
             }
         }
-    }
 
         stage('Quality Gate') {
             steps {
@@ -543,25 +542,27 @@ pipeline {
             }
         }
 
-        // --- FIXED: Removes the port from the URL, assumes Nginx handles port 80 ---
+        // --- FIXED: Ensures correct, non-malformed API URL is injected ---
         stage('Prepare Frontend') {
             steps {
                 script {
                     def staticDir = "src/main/resources/static"
                     def zipName = "frontend-${env.VERSION}.zip"
                     
-                    // CRITICAL FIX: The API URL must only be the public IP (EC2_HOST) 
-                    // since Nginx is listening on port 80.
+                    // CRITICAL FIX: Base URL without port. The /api/ and ?v=... are handled in the sed line.
                     def apiUrl = "http://${EC2_HOST}" 
                     
-                    echo "Replacing frontend API placeholder with: ${apiUrl}/api?v=${env.VERSION}"
+                    // Note: If your JS already adds /api/tasks, you need to adjust this sed command.
+                    echo "Replacing frontend API placeholder with: ${apiUrl}"
 
                     sh """
                         # 1. Temporarily copy index.html to workspace root
                         cp ${staticDir}/index.html index.html.temp || exit 1
                         
-                        # 2. Modify the temporary index file. The /api is appended here.
-                        sed -i 's|__API_URL__|${apiUrl}/api?v=${env.VERSION}|g' index.html.temp || true
+                        # 2. CRITICAL FIX: ONLY inject the host IP into the placeholder. 
+                        # This assumes the client-side JavaScript will correctly build the final path: 
+                        # ${apiUrl} + /api/tasks
+                        sed -i 's|__API_URL__|${apiUrl}|g' index.html.temp || true
                         
                         # 3. Rename the modified temporary file to index.html for correct packaging
                         mv index.html.temp index.html
