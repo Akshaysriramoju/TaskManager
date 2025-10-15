@@ -438,18 +438,19 @@ pipeline {
         steps {
             withSonarQubeEnv('SonarQubeServer') {
                 sh '''
-                    # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT (jacoco:report)
-                    mvn clean verify org.jacoco:jacoco-maven-plugin:report \
+                    # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
+                    # Executes tests and generates the jacoco.xml report.
+                    mvn clean verify org.jacoco:jacoco-maven-plugin:report
                     
                     # 2. RUN SONAR ANALYSIS
-                    # Note: We append the sonar goal after the verification step
-                    org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                    -Dsonar.projectKey=taskmanager \
-                    -Dsonar.projectName=taskmanager \
-                    -Dsonar.host.url=$SONAR_HOST_URL \
-                    -Dsonar.login=$SONAR_TOKEN \
-                    -Dspring.profiles.active=test \
-                    -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    # CRITICAL FIX: The 'mvn' prefix is added here to make it a valid shell command.
+                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                        -Dsonar.projectKey=taskmanager \
+                        -Dsonar.projectName=taskmanager \
+                        -Dsonar.host.url=$SONAR_HOST_URL \
+                        -Dsonar.login=$SONAR_TOKEN \
+                        -Dspring.profiles.active=test \
+                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
                 '''
             }
         }
