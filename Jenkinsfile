@@ -536,36 +536,37 @@ pipeline {
             }
         }
 
-        // --- CORRECTED: Ensures ZIP is created in workspace root and index.html is modified correctly ---
         stage('Prepare Frontend') {
-            steps {
-                script {
-                    def staticDir = "src/main/resources/static"
-                    def zipName = "frontend-${env.VERSION}.zip"
-                    def apiUrl = "http://${EC2_HOST}:${BACKEND_HOST_PORT}"
-                    echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
+        steps {
+            script {
+                def staticDir = "src/main/resources/static"
+                def zipName = "frontend-${env.VERSION}.zip"
+                def apiUrl = "http://${EC2_HOST}:${BACKEND_HOST_PORT}"
+                echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
 
-                    sh """
-                        # 1. Temporarily copy the index.html to the workspace root for modification
-                        cp ${staticDir}/index.html index.html.temp || exit 1
-                        
-                        # 2. Replace placeholder in the temporary index.html
-                        sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html.temp || true
+                sh """
+                    # 1. Temporarily copy the index.html to the workspace root for modification
+                    cp ${staticDir}/index.html index.html.temp || exit 1
+                    
+                    # 2. Replace placeholder in the temporary index.html
+                    sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html.temp || true
 
-                        # 3. Create the zip archive with ALL static files, placing the zip in the root.
-                        #    -j (junk paths) is used to include only file names, not the 'src/main/resources/static' directory structure.
-                        zip -j ${zipName} ${staticDir}/*
-                        
-                        # 4. Replace the original index.html inside the zip with the modified index.html.temp
-                        zip -d ${zipName} index.html.temp # Remove original index.html from zip
-                        zip -u ${zipName} index.html.temp -j # Add modified index.html.temp (saved as index.html inside zip)
-                        
-                        # 5. Clean up temporary file
-                        rm index.html.temp
-                    """
-                }
+                    # 3. Create the zip archive with ALL static files, placing the zip in the root.
+                    #    -j (junk paths) is used to include only file names.
+                    zip -j ${zipName} ${staticDir}/*
+                    
+                    # 4. DELETE the original index.html from INSIDE the zip (which was added in step 3)
+                    zip -d ${zipName} index.html 
+                    
+                    # 5. Add the MODIFIED index.html.temp file back into the zip, renaming it to index.html
+                    zip -u ${zipName} index.html.temp -j
+
+                    # 6. Clean up temporary file
+                    rm index.html.temp
+                """
             }
         }
+    }
 
 
         // --- CORRECTED: Deploy to EC2 (Frontend + Backend docker) ---
