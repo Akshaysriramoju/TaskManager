@@ -1,4 +1,5 @@
-const API_URL = "http://localhost:8080/api/tasks";
+// Use the API_BASE variable set in index.html by Jenkins
+const API_URL = `${API_BASE}/api/tasks`;
 
 async function loadTasks() {
     const res = await fetch(API_URL);

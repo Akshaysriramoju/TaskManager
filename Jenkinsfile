@@ -183,14 +183,22 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL = "http://13.233.135.138:9000"
+        SONAR_HOST_URL = "http://52.66.228.227:9000"
         SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
         NEXUS_CRED = credentials('NEXUS_CREDENTIALS') // Nexus username:password stored as single Jenkins credential
-        NEXUS_URL = "http://13.233.135.138:8081/repository/taskmanager-releases"
+        NEXUS_URL = "http://52.66.228.227:8081/repository/taskmanager-releases/"
         GROUP_ID = "com/example"  // Convert dots to slashes for Maven repo path
         ARTIFACT_ID = "taskmanager"
-        IMAGE_NAME = "akshaysriramoju/taskmanager"   // Docker image name
+        IMAGE_NAME = "taskmanager"   // Docker image name
         DOCKER_REGISTRY = "docker.io/akshaysriramoju" // Replace with your DockerHub username
+
+        // --- EC2 / deployment targets ---
+        EC2_USER = "ubuntu"
+        EC2_HOST = "52.66.228.227"               // <-- CHANGE to your EC2 public IP or DNS
+        REMOTE_FRONTEND_DIR = "/var/www/html"     // Nginx root
+        REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
+        BACKEND_HOST_PORT = "8084"                // host port (not 8080/8081/9000)
+        BACKEND_CONTAINER_PORT = "8080"           // container exposes 8080
     }
 
     stages {
@@ -300,6 +308,92 @@ pipeline {
                     """
                 }
             }
+        }
+
+        stage('Prepare Frontend') {
+    steps {
+        script {
+            // API URL replacement
+            def apiUrl = "http://${EC2_HOST}:${BACKEND_HOST_PORT}"
+            echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
+
+            sh """
+                cd src/main/resources/static || exit 1
+                # Backup index.html then replace placeholder
+                cp index.html index.html.bak || true
+                sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html || true
+
+                # Package frontend for deployment
+                zip -r ../../../frontend-${env.VERSION}.zip * || true
+                cd ../../../
+            """
+        }
+    }
+}
+
+
+        /* ---------- NEW: Deploy frontend + pull & restart backend container on EC2 ---------- */
+        stage('Deploy to EC2 (Frontend + Backend docker)') {
+            steps {
+                // SSH deploy using ssh-agent credential 'ec2-deploy-key' in Jenkins (must exist)
+                sshagent(['ec2-deploy-key']) {
+                    script {
+                        // upload frontend zip
+                        sh """
+                            scp -o StrictHostKeyChecking=no frontend-${env.VERSION}.zip ${EC2_USER}@${EC2_HOST}:/tmp/
+                        """
+
+                        // remote commands: unzip frontend -> /var/www/html and pull & run docker image
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} <<'REMOTE'
+                                set -e
+
+                                # FRONTEND: deploy static files to nginx directory
+                                sudo mkdir -p ${REMOTE_FRONTEND_DIR}
+                                sudo rm -rf ${REMOTE_FRONTEND_DIR}/*
+                                sudo unzip -o /tmp/frontend-${env.VERSION}.zip -d /tmp/frontend_deploy || true
+                                sudo cp -r /tmp/frontend_deploy/* ${REMOTE_FRONTEND_DIR}/
+                                rm -rf /tmp/frontend_deploy /tmp/frontend-${env.VERSION}.zip
+
+                                # BACKEND: ensure backend dir exists
+                                mkdir -p ${REMOTE_BACKEND_DIR}
+                                cd ${REMOTE_BACKEND_DIR}
+
+                                # Pull image and restart container
+                                docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION} || true
+
+                                # Stop & remove existing container (if present)
+                                docker rm -f ${ARTIFACT_ID} || true
+
+                                # Start new container mapped to host port ${BACKEND_HOST_PORT}
+                                docker run -d --name ${ARTIFACT_ID} -p ${BACKEND_HOST_PORT}:${BACKEND_CONTAINER_PORT} \
+                                  --env SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/taskmanager \
+                                  --env SPRING_DATASOURCE_USERNAME=task_user \
+                                  --env SPRING_DATASOURCE_PASSWORD=task_pass \
+                                  ${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.VERSION}
+
+                                # Optional: check container status
+                                sleep 3
+                                docker ps --filter name=${ARTIFACT_ID}
+                            REMOTE
+                        """
+                    }
+                }
+            }
+        }
+
+    } // stages
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo "✅ Pipeline completed successfully! Frontend served by Nginx and backend updated from DockerHub (port ${BACKEND_HOST_PORT})."
+            echo "Open in browser: http://${EC2_HOST}/"
+        }
+        failure {
+            echo "❌ Pipeline failed. Check logs."
         }
     }
 }
