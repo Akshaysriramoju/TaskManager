@@ -9,12 +9,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     @Value("${app.cors.allowed-origin}")
-    private String allowedOrigin; // Inject the allowed origin from application.properties
+    private String allowedOrigin; // Injects the allowed origin from application.properties
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // The value injected here is http://65.2.36.235, which is the Nginx access point.
         registry.addMapping("/**") // Apply to all API endpoints
-                .allowedOrigins(allowedOrigin) // Use the injected property
+                .allowedOrigins(allowedOrigin) 
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true);
