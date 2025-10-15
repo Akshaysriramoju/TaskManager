@@ -420,7 +420,7 @@ pipeline {
         // --- EC2 / deployment targets ---
         EC2_USER = "ubuntu"
         EC2_HOST = "52.66.228.227"                // <-- Public IP
-        REMOTE_DB_HOST = "172.31.18.171"           // <--- CRITICAL: REPLACE with your EC2 PRIVATE IP
+        REMOTE_DB_HOST = "172.31.18.171"           // <--- CRITICAL: EC2 PRIVATE IP
         REMOTE_FRONTEND_DIR = "/var/www/html"      // Nginx root
         REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
         BACKEND_HOST_PORT = "8084"                 // host port 
@@ -537,39 +537,37 @@ pipeline {
         }
 
         stage('Prepare Frontend') {
-        steps {
-            script {
-                def staticDir = "src/main/resources/static"
-                def zipName = "frontend-${env.VERSION}.zip"
-                def apiUrl = "http://${EC2_HOST}:${BACKEND_HOST_PORT}"
-                echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
+            steps {
+                script {
+                    def staticDir = "src/main/resources/static"
+                    def zipName = "frontend-${env.VERSION}.zip"
+                    def apiUrl = "http://${EC2_HOST}:${BACKEND_HOST_PORT}"
+                    echo "Replacing frontend API placeholder with: ${apiUrl}?v=${env.VERSION}"
 
-                sh """
-                    # 1. Temporarily copy the index.html to the workspace root for modification
-                    cp ${staticDir}/index.html index.html.temp || exit 1
-                    
-                    # 2. Replace placeholder in the temporary index.html
-                    sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html.temp || true
+                    sh """
+                        # 1. Temporarily copy the index.html to the workspace root for modification
+                        cp ${staticDir}/index.html index.html.temp || exit 1
+                        
+                        # 2. Replace placeholder in the temporary index.html
+                        sed -i 's|__API_URL__|${apiUrl}?v=${env.VERSION}|g' index.html.temp || true
 
-                    # 3. Create the zip archive with ALL static files, placing the zip in the root.
-                    #    -j (junk paths) is used to include only file names.
-                    zip -j ${zipName} ${staticDir}/*
-                    
-                    # 4. DELETE the original index.html from INSIDE the zip (which was added in step 3)
-                    zip -d ${zipName} index.html 
-                    
-                    # 5. Add the MODIFIED index.html.temp file back into the zip, renaming it to index.html
-                    zip -u ${zipName} index.html.temp -j
+                        # 3. Create the zip archive with ALL static files, placing the zip in the root.
+                        zip -j ${zipName} ${staticDir}/*
+                        
+                        # 4. DELETE the original index.html from INSIDE the zip (which was added in step 3)
+                        zip -d ${zipName} index.html 
+                        
+                        # 5. Add the MODIFIED index.html.temp file back into the zip, renaming it to index.html
+                        zip -u ${zipName} index.html.temp -j
 
-                    # 6. Clean up temporary file
-                    rm index.html.temp
-                """
+                        # 6. Clean up temporary file
+                        rm index.html.temp
+                    """
+                }
             }
         }
-    }
 
 
-        /* ---------- FIXED: Deploy frontend + pull & restart backend container on EC2 ---------- */
         stage('Deploy to EC2 (Frontend + Backend docker)') {
             steps {
                 // SSH deploy using ssh-agent credential 'ec2-deploy-key' in Jenkins (must exist)
@@ -593,7 +591,7 @@ pipeline {
                                 sudo unzip -o /tmp/frontend-${env.VERSION}.zip -d /tmp/frontend_deploy || true
                                 sudo cp -r /tmp/frontend_deploy/* ${REMOTE_FRONTEND_DIR}/
                                 
-                                # *** CRITICAL FIX: Use SUDO for cleanup of root-owned files ***
+                                # CRITICAL FIX: Use SUDO for cleanup of root-owned files
                                 sudo rm -rf /tmp/frontend_deploy /tmp/frontend-${env.VERSION}.zip
 
                                 # BACKEND: ensure backend dir exists
@@ -616,7 +614,7 @@ pipeline {
                                 # Optional: check container status
                                 sleep 3
                                 docker ps --filter name=${ARTIFACT_ID}
-                            REMOTE
+REMOTE
                         """
                     }
                 }
