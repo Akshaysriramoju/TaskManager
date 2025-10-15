@@ -13,11 +13,11 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        // The value injected here is http://65.2.36.235, which is the Nginx access point.
+        // This is the correct, conflict-free CORS configuration.
+        // The allowedOrigins is injected, and the conflicting allowCredentials(true) is removed.
         registry.addMapping("/**") // Apply to all API endpoints
                 .allowedOrigins(allowedOrigin) 
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true);
+                .allowedHeaders("*"); 
     }
 }
