@@ -433,25 +433,23 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQubeServer') {
-                    sh '''
-                        # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
-                        mvn clean verify org.jacoco:jacoco-maven-plugin:report
-                        
-                        # 2. RUN SONAR ANALYSIS (Uses sonar.token for current standard)
-                        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                            -Dsonar.projectKey=taskmanager \
-                            -Dsonar.projectName=taskmanager \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.token=$SONAR_TOKEN \  
-                            -Dspring.profiles.active=test \
-                            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-                    '''
-                }
+       stage('SonarQube Analysis') {
+        steps {
+            withSonarQubeEnv('SonarQubeServer') {
+                sh '''
+                    # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
+                    mvn clean verify org.jacoco:jacoco-maven-plugin:report
+                    
+                    # 2. RUN SONAR ANALYSIS (Simplified to one line to eliminate syntax errors)
+                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                        -Dsonar.projectKey=taskmanager -Dsonar.projectName=taskmanager \
+                        -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN \
+                        -Dspring.profiles.active=test \
+                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                '''
             }
         }
+    }
 
         stage('Quality Gate') {
             steps {
