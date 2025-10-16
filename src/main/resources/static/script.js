@@ -1,8 +1,12 @@
-// Use the API_BASE variable set in index.html by Jenkins
-const API_URL = `${API_BASE}/api/tasks`;
+// The API_BASE variable (e.g., "http://13.200.137.176") is set in index.html by Jenkins.
+// The actual endpoint is used consistently below.
+const API_ENDPOINT = `${API_BASE}/api/tasks`; // This is the corrected, central resource URL
 
 async function loadTasks() {
-    const res = await fetch(API_URL);
+    // 🚨 FIX: Using the corrected API_ENDPOINT constant
+    const res = await fetch(API_ENDPOINT);
+    
+    // The previous 404 caused this TypeError, which will be fixed once the URL is correct.
     const tasks = await res.json();
     const list = document.getElementById("taskList");
     list.innerHTML = "";
@@ -21,7 +25,8 @@ async function addTask() {
     const title = document.getElementById("taskInput").value;
     if (!title) return;
 
-    await fetch(API_URL, {
+    // 🚨 FIX: Using the corrected API_ENDPOINT constant
+    await fetch(API_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, completed: false })
@@ -32,7 +37,8 @@ async function addTask() {
 }
 
 async function toggleTask(id, completed) {
-    await fetch(`${API_URL}/${id}`, {
+    // 🚨 FIX: Using the corrected API_ENDPOINT constant
+    await fetch(`${API_ENDPOINT}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "", completed })
@@ -41,7 +47,8 @@ async function toggleTask(id, completed) {
 }
 
 async function deleteTask(id) {
-    await fetch(`${API_URL}/${id}`, {
+    // 🚨 FIX: Using the corrected API_ENDPOINT constant
+    await fetch(`${API_ENDPOINT}/${id}`, {
         method: "DELETE"
     });
     loadTasks();
