@@ -408,22 +408,23 @@ pipeline {
 
     environment {
         SONAR_HOST_URL = "http://13.200.137.176:9000"
-        SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
-        NEXUS_CRED = credentials('NEXUS_CREDENTIALS') // Nexus username:password stored as single Jenkins credential
-        NEXUS_URL = "http://13.200.137.176:8081/repository/taskmanager-releases/"
-        GROUP_ID = "com/example"   // Convert dots to slashes for Maven repo path
+        SONAR_TOKEN = credentials('SONAR_TOKEN')
+        NEXUS_CRED = credentials('NEXUS_CREDENTIALS')
+        // FIX #1: Removed trailing slash from NEXUS_URL to prevent double slashes
+        NEXUS_URL = "http://13.200.137.176:8081/repository/taskmanager-releases" 
+        GROUP_ID = "com/example"
         ARTIFACT_ID = "taskmanager"
-        IMAGE_NAME = "taskmanager"   // Docker image name
-        DOCKER_REGISTRY = "docker.io/akshaysriramoju" // Replace with your DockerHub username
+        IMAGE_NAME = "taskmanager"
+        DOCKER_REGISTRY = "docker.io/akshaysriramoju"
 
-        // --- EC2 / deployment targets ---
+        // EC2 / deployment targets
         EC2_USER = "ubuntu"
-        EC2_HOST = "13.200.137.176"                // Public IP (Nginx entry point)
-        REMOTE_DB_HOST = "172.31.18.171"           // CRITICAL: EC2 PRIVATE IP
-        REMOTE_FRONTEND_DIR = "/var/www/html"      // Nginx root
+        EC2_HOST = "13.200.137.176"
+        REMOTE_DB_HOST = "172.31.18.171"
+        REMOTE_FRONTEND_DIR = "/var/www/html"
         REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
-        BACKEND_HOST_PORT = "8084"                 // host port 
-        BACKEND_CONTAINER_PORT = "8080"            // container exposes 8080
+        BACKEND_HOST_PORT = "8084"
+        BACKEND_CONTAINER_PORT = "8080"
     }
 
     stages {
@@ -433,23 +434,23 @@ pipeline {
             }
         }
 
-       stage('SonarQube Analysis') {
-        steps {
-            withSonarQubeEnv('SonarQubeServer') {
-                sh '''
-                    # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
-                    mvn clean verify org.jacoco:jacoco-maven-plugin:report
-                    
-                    # 2. RUN SONAR ANALYSIS (Simplified to one line to eliminate syntax errors)
-                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                        -Dsonar.projectKey=taskmanager -Dsonar.projectName=taskmanager \
-                        -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN \
-                        -Dspring.profiles.active=test \
-                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-                '''
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQubeServer') {
+                    sh '''
+                        # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
+                        mvn clean verify org.jacoco:jacoco-maven-plugin:report
+                        
+                        # 2. RUN SONAR ANALYSIS (Uses sonar.token for standard compliance)
+                        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                            -Dsonar.projectKey=taskmanager -Dsonar.projectName=taskmanager \
+                            -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN \
+                            -Dspring.profiles.active=test \
+                            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
+                }
             }
         }
-    }
 
         stage('Quality Gate') {
             steps {
@@ -492,12 +493,10 @@ pipeline {
         stage('Upload JAR to Nexus') {
             steps {
                 script {
-                    // Split the stored credentials into username and password
                     def nexusCredentials = NEXUS_CRED.split(':')
                     def nexusUser = nexusCredentials[0]
                     def nexusPassword = nexusCredentials[1]
 
-                    // Construct proper Maven path for Nexus 2 repository
                     def jarFile = "target/${ARTIFACT_ID}-${env.VERSION}.jar"
                     def nexusPath = "${NEXUS_URL}/${GROUP_ID}/${ARTIFACT_ID}/${env.VERSION}/${ARTIFACT_ID}-${env.VERSION}.jar"
 
@@ -538,7 +537,6 @@ pipeline {
             }
         }
 
-        // --- FIXED: Ensures correct, non-malformed API URL is injected ---
         stage('Prepare Frontend') {
             steps {
                 script {
@@ -554,13 +552,13 @@ pipeline {
                         # 1. Temporarily copy index.html to workspace root
                         cp ${staticDir}/index.html index.html.temp || exit 1
                         
-                        # 2. Modify the temporary index file. The JS handles the /api/ and version string.
+                        # 2. Inject the host IP into the placeholder. 
                         sed -i 's|__API_URL__|${apiUrl}|g' index.html.temp || true
                         
                         # 3. Rename the modified temporary file to index.html for correct packaging
                         mv index.html.temp index.html
                         
-                        # 4. Create the zip archive with ALL static files, ensuring index.html is the modified one.
+                        # 4. Create the zip archive 
                         zip -j ${zipName} index.html ${staticDir}/script.js ${staticDir}/styles.css
                         
                         # 5. Clean up temporary files
@@ -594,6 +592,9 @@ pipeline {
                                 sudo unzip -o /tmp/frontend-${env.VERSION}.zip -d /tmp/frontend_deploy || true
                                 sudo cp -r /tmp/frontend_deploy/* ${REMOTE_FRONTEND_DIR}/
                                 
+                                # FIX #2: Ownership Check (Prevents 403 Forbidden errors)
+                                sudo chown -R www-data:www-data ${REMOTE_FRONTEND_DIR}
+
                                 # CRITICAL FIX: Use SUDO for cleanup of root-owned files
                                 sudo rm -rf /tmp/frontend_deploy /tmp/frontend-${env.VERSION}.zip
 
