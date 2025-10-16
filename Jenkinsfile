@@ -407,10 +407,10 @@ pipeline {
     }
 
     environment {
-        SONAR_HOST_URL = "http://65.2.36.235:9000"
+        SONAR_HOST_URL = "http://13.200.137.176:9000"
         SONAR_TOKEN = credentials('SONAR_TOKEN')   // SonarQube token stored in Jenkins
         NEXUS_CRED = credentials('NEXUS_CREDENTIALS') // Nexus username:password stored as single Jenkins credential
-        NEXUS_URL = "http://65.2.36.235:8081/repository/taskmanager-releases/"
+        NEXUS_URL = "http://13.200.137.176:8081/repository/taskmanager-releases/"
         GROUP_ID = "com/example"   // Convert dots to slashes for Maven repo path
         ARTIFACT_ID = "taskmanager"
         IMAGE_NAME = "taskmanager"   // Docker image name
@@ -418,7 +418,7 @@ pipeline {
 
         // --- EC2 / deployment targets ---
         EC2_USER = "ubuntu"
-        EC2_HOST = "65.2.36.235"                // <-- Public IP (Nginx entry point)
+        EC2_HOST = "13.200.137.176"                // Public IP (Nginx entry point)
         REMOTE_DB_HOST = "172.31.18.171"           // CRITICAL: EC2 PRIVATE IP
         REMOTE_FRONTEND_DIR = "/var/www/html"      // Nginx root
         REMOTE_BACKEND_DIR = "/home/ubuntu/backend"
@@ -438,16 +438,14 @@ pipeline {
                 withSonarQubeEnv('SonarQubeServer') {
                     sh '''
                         # 1. CLEAN, RUN TESTS, and GENERATE COVERAGE REPORT
-                        # Executes tests and generates the jacoco.xml report.
                         mvn clean verify org.jacoco:jacoco-maven-plugin:report
                         
-                        # 2. RUN SONAR ANALYSIS
-                        # CRITICAL FIX: The 'mvn' prefix is added here to make it a valid shell command.
+                        # 2. RUN SONAR ANALYSIS (Uses sonar.token for current standard)
                         mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
                             -Dsonar.projectKey=taskmanager \
                             -Dsonar.projectName=taskmanager \
                             -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.login=$SONAR_TOKEN \
+                            -Dsonar.token=$SONAR_TOKEN \  
                             -Dspring.profiles.active=test \
                             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
                     '''
@@ -549,19 +547,16 @@ pipeline {
                     def staticDir = "src/main/resources/static"
                     def zipName = "frontend-${env.VERSION}.zip"
                     
-                    // CRITICAL FIX: Base URL without port. The /api/ and ?v=... are handled in the sed line.
+                    // The API URL is the Nginx entry point (port 80)
                     def apiUrl = "http://${EC2_HOST}" 
                     
-                    // Note: If your JS already adds /api/tasks, you need to adjust this sed command.
                     echo "Replacing frontend API placeholder with: ${apiUrl}"
 
                     sh """
                         # 1. Temporarily copy index.html to workspace root
                         cp ${staticDir}/index.html index.html.temp || exit 1
                         
-                        # 2. CRITICAL FIX: ONLY inject the host IP into the placeholder. 
-                        # This assumes the client-side JavaScript will correctly build the final path: 
-                        # ${apiUrl} + /api/tasks
+                        # 2. Modify the temporary index file. The JS handles the /api/ and version string.
                         sed -i 's|__API_URL__|${apiUrl}|g' index.html.temp || true
                         
                         # 3. Rename the modified temporary file to index.html for correct packaging
